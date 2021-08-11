@@ -3,6 +3,7 @@ import datetime
 import time
 import tkinter
 import tkinter.messagebox
+import sys
 
 import openpyxl
 from openpyxl import Workbook
@@ -12,11 +13,34 @@ from openpyxl.utils import get_column_letter
 
 # 结果Excel
 class ResultExcel:
-    __slots__ = ("_month", "_workbook", "_worksheet")
 
     def __init__(self, month=1):
         self._workbook = Workbook()
         self._month = month  # 需要几月份的工时统计
+        self.employee_name_list = []  # 人员名单
+        self.employee_department = ""  # 部门名称
+        self.employee_num = 0  # 人员数量
+        # 从配置文件.ini读入人员名单
+        with open("配置文件.ini", 'r', encoding="utf8") as file_to_read:
+            line = file_to_read.readline()  # 取出第一行，识别个人标识是否存在
+            if line.find("研发中心-航电部-杨青云") == -1:
+                tkinter.messagebox.showinfo("识别失败", "请勿删除或改动'配置文件.ini'的第一行")
+                sys.exit()
+            else:
+                line = file_to_read.readline()  # 取出第二行，识别部门名称
+                if line == '\n':
+                    tkinter.messagebox.showinfo("未输入部门名", "请在第二行输入部门名称")
+                    sys.exit()
+                else:
+                    self.employee_department = line.strip('\n')
+                    line = file_to_read.readline()  # 剔除部门下面的一行
+                    while True:
+                        line = file_to_read.readline()
+                        if not line:
+                            break
+                        line = line.strip('\n')
+                        self.employee_name_list.append(line)
+        self.employee_num = len(self.employee_name_list)  # 员工个数
 
     def init_template(self):
         month = self._month
@@ -33,17 +57,11 @@ class ResultExcel:
         header.append("总计（小时）")
         for i in range(1, len(header) + 1, 1):  # 初始化表头
             self._worksheet.cell(1, i).value = header[i - 1]
-        employee_num = 60  # 60个员工
-        employee_name_list = ["石磊", "张宏志", "李亚杰", "李蓉", "史飞", "彭晓清", "刘晓羽", "教丽敏", "吴静", "许菊芬",
-                              "李俊勰", "邹勇", "秦明", "卿涛", "陈远刚", "王兰", "罗燕", "徐滔", "鲁鹏飞", "陈香艳",
-                              "肖瑾", "范诗洋", "郭星灿", "赵子岳", "王翊军", "袁鸿亮", "顾康", "陈倩", "章拔邦", "李登登",
-                              "杨青云", "徐美芳", "郭良", "谷雨", "张瑞平", "吴海燕", "赵永红", "周婷", "潘磊", "李丹丹",
-                              "谢辉", "卢灿", "刘妍", "裴沛", "范小勇", "赵红军", "刘斌", "郑娉", "刘金宝", "胡玫瑰",
-                              "侯韬", "刘燕龙", "王海红", "包贵浩", "黄凌龙", "梁红云", "刘锐", "屈霞", "郑秀华", "李燕南"]
-        for i in range(1, employee_num + 1, 1):
+
+        for i in range(1, self.employee_num + 1, 1):
             self._worksheet.cell(i + 1, 1).value = i
-            self._worksheet.cell(i + 1, 2).value = employee_name_list[i - 1]
-            self._worksheet.cell(i + 1, 3).value = "航电部"
+            self._worksheet.cell(i + 1, 2).value = self.employee_name_list[i - 1]
+            self._worksheet.cell(i + 1, 3).value = self.employee_department
 
     def analyse(self, filename="全体员工.xlsx"):
         # 打开参考工作簿，注意只支持xlsx格式
@@ -56,10 +74,10 @@ class ResultExcel:
         for i in range(2, self._worksheet.max_row + 1):
             employee_name = self._worksheet.cell(i, 2).value  # 当前用户名
             for j in range(4, self._worksheet.max_column + 1):  # 从第2行，第4列开始填数据
-                if j == self._worksheet.max_column-1:  # 倒数第二列是总计（分钟）
+                if j == self._worksheet.max_column - 1:  # 倒数第二列是总计（分钟）
                     col_letter = get_column_letter(j - 1)
                     self._worksheet.cell(i, j).value = "=SUM(D" + str(i) + ":" + col_letter + str(i) + ")"
-                elif j==self._worksheet.max_column:  # 倒数第一列是总计（小时）
+                elif j == self._worksheet.max_column:  # 倒数第一列是总计（小时）
                     col_letter = get_column_letter(j - 1)
                     self._worksheet.cell(i, j).value = "=FLOOR(" + col_letter + str(i) + "/60,1)"
                 else:
@@ -70,7 +88,8 @@ class ResultExcel:
                         # reference_sheet的第2列是日期，第6列是姓名，第11列是加班分钟，存在字符串格式的数字
 
                         if reference_sheet.cell(ref_i, 2).value == current_day and reference_sheet.cell(ref_i,
-                                6).value == employee_name and float(reference_sheet.cell(ref_i, 11).value) != 0:
+                                                                                                        6).value == employee_name and float(
+                            reference_sheet.cell(ref_i, 11).value) != 0:
                             self._worksheet.cell(i, j).value = float(reference_sheet.cell(ref_i, 11).value)
 
     def convert_date(self, old_date):
@@ -94,19 +113,19 @@ class ResultExcel:
                 cell.alignment = align
 
         fille = openpyxl.styles.PatternFill('solid', fgColor='ffeb9c')
-        #标记所有为周末的本列为黄色（含周六和周日），日期从第四列开始，最后2列为总计列
-        for col_j in range(4,self._worksheet.max_column-1,1):
-            temp =  self._worksheet.cell(1,col_j).value
+        # 标记所有为周末的本列为黄色（含周六和周日），日期从第四列开始，最后2列为总计列
+        for col_j in range(4, self._worksheet.max_column - 1, 1):
+            temp = self._worksheet.cell(1, col_j).value
             temp = temp.split('.')
             year = time.strftime("%Y")
-            weekday = datetime.date(int(year),int(temp[0]),int(temp[1])).isoweekday()
+            weekday = datetime.date(int(year), int(temp[0]), int(temp[1])).isoweekday()
             if weekday == 6 or weekday == 7:
-                for row_i in range(1,self._worksheet.max_row+1,1):
+                for row_i in range(1, self._worksheet.max_row + 1, 1):
                     self._worksheet.cell(row_i, col_j).fill = fille
 
     def save_excel(self):
         year = time.strftime("%Y")
-        filename = str(year) + "年" + str(self._month) + "月份赶工核对（航电部）.xlsx"
+        filename = str(year) + "年" + str(self._month) + "月份赶工核对（" + self.employee_department + "）.xlsx"
         self._workbook.save(filename)
         tkinter.messagebox.showinfo("成功", "已完成转换")
 
@@ -121,7 +140,7 @@ def main():
 
     rootGUI = tkinter.Tk()
     rootGUI.title("员工工时统计转换")
-    L1 = tkinter.Label(rootGUI, text="请将[全体员工.xlsx]放入与本程序一个目录下")
+    L1 = tkinter.Label(rootGUI, text="请将【全体员工.xlsx】放入与本程序一个目录下\n编制者：【航电部-杨青云】，如有疑问请联系我！")
     L1.pack()
     L2 = tkinter.Label(rootGUI, text="清输入生成表月份")
     L2.pack()
